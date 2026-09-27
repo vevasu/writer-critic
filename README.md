@@ -70,25 +70,14 @@ The app uses one server-side model key, so everyone who can open it spends your 
 
 It runs each job in a background thread and keeps jobs in memory, so it needs CPU between requests and a single instance: `--no-cpu-throttling --max-instances 1`.
 
-One-time setup (Windows `cmd` shown, region as for the Workbench):
+Deploy with one command, from this folder in PowerShell (needs `gcloud`, logged in and set to the project that runs the Workbench):
 
-1. Create a Workbench project and key for the app, with your admin key:
-   ```
-   curl -X POST https://eval-workbench-5lofnwh6hq-uc.a.run.app/admin/projects -H "Authorization: Bearer ADMIN_KEY" -H "Content-Type: application/json" -d "{\"name\":\"Writer and Critic\",\"id\":\"writer-critic\"}"
-   curl -X POST https://eval-workbench-5lofnwh6hq-uc.a.run.app/admin/projects/writer-critic/keys -H "Authorization: Bearer ADMIN_KEY" -H "Content-Type: application/json" -d "{\"name\":\"cloud run\"}"
-   ```
-   The second command prints the key (`ewb_...`) once.
-2. Store it and your OpenAI key in Secret Manager and let Cloud Run read them (find PROJECT_NUMBER with `gcloud projects describe YOUR_PROJECT_ID`):
-   ```
-   echo|set /p="ewb_..." | gcloud secrets create writer-critic-workbench-key --data-file=-
-   echo|set /p="sk-..." | gcloud secrets create writer-critic-openai-key --data-file=-
-   gcloud secrets add-iam-policy-binding writer-critic-workbench-key --member=serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com --role=roles/secretmanager.secretAccessor
-   gcloud secrets add-iam-policy-binding writer-critic-openai-key --member=serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com --role=roles/secretmanager.secretAccessor
-   ```
-3. Deploy from this folder:
-   ```
-   gcloud run deploy writer-critic --source . --region us-central1 --no-allow-unauthenticated --no-cpu-throttling --max-instances 1 --set-env-vars EVAL_WORKBENCH_URL=https://eval-workbench-5lofnwh6hq-uc.a.run.app,APP_VERSION=v1 --set-secrets OPENAI_API_KEY=writer-critic-openai-key:latest,EVAL_WORKBENCH_API_KEY=writer-critic-workbench-key:latest
-   ```
-4. Open it: `gcloud run services proxy writer-critic --region us-central1 --port 8200`, then http://127.0.0.1:8200.
+```
+powershell -ExecutionPolicy Bypass -File .\deploy.ps1
+```
 
-To see its traffic, open the Workbench, choose **I have a key**, paste the key from step 1 and open **Production**. After changing a prompt or model, deploy again with a new `APP_VERSION` (`--update-env-vars APP_VERSION=v2`) and the Production page compares the two versions. `.gcloudignore` keeps your local `.env` out of the upload.
+`deploy.ps1` creates the `writer-critic` project and a key in the Workbench, saves that key and your OpenAI key (asked for once) in Secret Manager, lets Cloud Run read them, and deploys. It is safe to run again: each step skips what already exists, and it replaces a saved Workbench key that no longer works. Deploy a new version with `-Version v2`.
+
+When it finishes, open the app with `gcloud run services proxy writer-critic --region us-central1 --port 8200` and go to http://127.0.0.1:8200.
+
+To see its traffic, open the Workbench, choose **I have a key**, paste the app's key (`gcloud secrets versions access latest --secret=writer-critic-workbench-key`) and open **Production**. After changing a prompt or model, run `deploy.ps1 -Version v2` and the Production page compares the two versions. `.gcloudignore` keeps your local `.env` out of the upload.
